@@ -152,7 +152,12 @@ function buildIndex(){
 
   Object.entries(PROV_NAMES).forEach(([code,name])=>{
     nameToCode[name]=code;
+    if(!cityMap[code]){
+      cityMap[code]={name,province:code};
+    }
   });
+  console.log('搜索索引已建立，可搜索项数量：',Object.keys(nameToCode).length);
+  console.log('测试：江苏省的代码是',nameToCode['江苏省']);
 }
 
 function getProvinceGeo(provCode){
@@ -161,6 +166,43 @@ function getProvinceGeo(provCode){
   const features=nationalGeo.features.filter(f=>cities.includes(String(f.properties.adcode)));
   provinceGeos[provCode]={type:'FeatureCollection',features};
   return provinceGeos[provCode];
+}
+
+function getVotesWithFallback(code){
+  if(cityStatus[code])return cityStatus[code];
+  if(code.endsWith('0000'))return null;
+  const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
+  return cityStatus[provCode]||null;
+}
+
+function aggregateProvinceCities(provCode){
+  const cities=provinceMap[provCode]||[];
+  const aggregated={};
+
+  cities.forEach(cityCode=>{
+    const cityVotes=cityStatus[cityCode];
+    if(cityVotes){
+      Object.entries(cityVotes).forEach(([user,status])=>{
+        if(status!=null){
+          if(!aggregated[user]){
+            aggregated[user]=[];
+          }
+          aggregated[user].push(status);
+        }
+      });
+    }
+  });
+
+  const result={};
+  Object.entries(aggregated).forEach(([user,statuses])=>{
+    const counts=[0,0,0,0,0];
+    statuses.forEach(s=>{if(s>=0&&s<=4)counts[s]++});
+    let maxCount=0,majority=0;
+    counts.forEach((c,i)=>{if(c>maxCount){maxCount=c;majority=i}});
+    result[user]=majority;
+  });
+
+  return Object.keys(result).length?result:null;
 }
 
 function aggregateVotes(votes){
@@ -192,25 +234,25 @@ function drawNational(){
   nationalGeo.features.forEach(f=>{
     const code=String(f.properties.adcode);
     const name=f.properties.name;
-    const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
-    const agg=aggregateVotes(cityStatus[provCode]);
+
+    if(code.endsWith('0000'))return;
+
+    const agg=aggregateVotes(cityStatus[code]);
     data.push({
       name,
       value:agg.total,
       itemStyle:{areaColor:agg.color},
       votes:agg,
-      code,
-      provCode
+      code
     });
   });
 
   chart.setOption({
     tooltip:{trigger:'item',formatter:p=>{
       if(!p.data)return p.name;
-      const provName=PROV_NAMES[p.data.provCode]||p.name;
       const v=p.data.votes;
-      if(!v||!v.total)return provName+'<br/>无人标记';
-      let html=`${provName}<br/>${v.total}人标记<br/>`;
+      if(!v||!v.total)return p.name+'<br/>无人标记';
+      let html=`${p.name}<br/>${v.total}人标记<br/>`;
       Object.entries(v.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
       return html.slice(0,-5);
     }},
@@ -227,10 +269,11 @@ function drawNational(){
     if(e.componentType==='series'){
       const item=data.find(d=>d.name===e.name);
       if(!item)return;
+      const provCode=cityMap[item.code]?cityMap[item.code].province:item.code.substring(0,2)+'0000';
       if(clickMode==='city'){
-        drillDown(item.provCode);
+        drillDown(provCode);
       }else{
-        clickCity(item.provCode);
+        clickCity(item.code);
       }
     }
   });
@@ -317,11 +360,27 @@ function goNational(){
 
 function clickCity(code){
   const patch={};
-  const votes=cityStatus[code]||{};
-  const myVote=votes[currentUser];
-  if(myVote===selected)patch[code]={...votes,[currentUser]:null};
-  else patch[code]={...votes,[currentUser]:selected};
-  Object.keys(patch[code]).forEach(k=>{if(patch[code][k]===null)delete patch[code][k]});
+
+  if(code.endsWith('0000')){
+    const cities=provinceMap[code]||[];
+    cities.forEach(cityCode=>{
+      const votes=cityStatus[cityCode]||{};
+      const myVote=votes[currentUser];
+      if(myVote===selected){
+        patch[cityCode]={...votes,[currentUser]:null};
+      }else{
+        patch[cityCode]={...votes,[currentUser]:selected};
+      }
+      Object.keys(patch[cityCode]).forEach(k=>{if(patch[cityCode][k]===null)delete patch[cityCode][k]});
+    });
+  }else{
+    const votes=cityStatus[code]||{};
+    const myVote=votes[currentUser];
+    if(myVote===selected)patch[code]={...votes,[currentUser]:null};
+    else patch[code]={...votes,[currentUser]:selected};
+    Object.keys(patch[code]).forEach(k=>{if(patch[code][k]===null)delete patch[code][k]});
+  }
+
   applyPatch(patch);
   push(patch);
 }
@@ -342,15 +401,16 @@ function refresh(){
     nationalGeo.features.forEach(f=>{
       const code=String(f.properties.adcode);
       const name=f.properties.name;
-      const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
-      const agg=aggregateVotes(cityStatus[provCode]);
+
+      if(code.endsWith('0000'))return;
+
+      const agg=aggregateVotes(cityStatus[code]);
       data.push({
         name,
         value:agg.total,
         itemStyle:{areaColor:agg.color},
         votes:agg,
-        code,
-        provCode
+        code
       });
     });
     chart.setOption({
