@@ -464,19 +464,12 @@ function clickCity(code){
   const patch={};
   const votes=cityStatus[code]||{};
   const myVote=votes[currentUser];
+  const newVote=myVote===selected?0:selected;
 
-  if(myVote===selected){
-    patch[code]={...votes,[currentUser]:0};
-  }else{
-    patch[code]={...votes,[currentUser]:selected};
-  }
+  patch[code]={...votes,[currentUser]:newVote};
 
-  if(patch[code][currentUser]===0||patch[code][currentUser]===null){
+  if(newVote===0){
     delete patch[code][currentUser];
-  }
-
-  if(!Object.keys(patch[code]).length){
-    delete patch[code];
   }
 
   applyPatch(patch);
