@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>下载地图数据</title>
+<style>
+body{font-family:'Microsoft YaHei',sans-serif;max-width:600px;margin:50px auto;padding:20px;background:#f5f5f5}
+.card{background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+h1{margin:0 0 10px;font-size:22px}
+p{color:#666;line-height:1.6}
+button{width:100%;padding:15px;font-size:16px;background:#5c6bc0;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:20px}
+button:hover{background:#4a5ab5}
+button:disabled{background:#ccc;cursor:not-allowed}
+.progress{margin-top:20px;display:none}
+.bar{height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:10px}
+.fill{height:100%;background:#5c6bc0;width:0;transition:.3s}
+.status{font-size:13px;color:#666}
+.log{margin-top:15px;max-height:200px;overflow-y:auto;background:#f9f9f9;padding:10px;border-radius:4px;font-size:12px;font-family:monospace;display:none}
+.log div{margin:3px 0}
+.success{color:#4caf50;font-weight:bold;margin-top:15px;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📥 下载中国地级市地图数据</h1>
+  <p>点击下方按钮，会自动下载全国 31 个省份的地图数据并合并。<br>预计需要 2-3 分钟，完成后会自动保存文件。</p>
+
+  <button id="btn" onclick="download()">开始下载</button>
+
+  <div class="progress" id="progress">
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <div class="status" id="status">准备中...</div>
+  </div>
+
+  <div class="log" id="log"></div>
+  <div class="success" id="success">✅ 下载完成！文件已保存为 china_cities.json</div>
+</div>
+
+<script>
+const DRILL=[110000,120000,130000,140000,150000,210000,220000,230000,320000,330000,340000,350000,360000,370000,410000,420000,430000,440000,450000,460000,500000,510000,520000,530000,540000,610000,620000,630000,640000,650000,310000];
+
+function log(msg){
+  const div=document.createElement('div');
+  div.textContent=msg;
+  document.getElementById('log').appendChild(div);
+  document.getElementById('log').scrollTop=9999;
+}
+
+async function download(){
+  const btn=document.getElementById('btn');
+  const prog=document.getElementById('progress');
+  const logEl=document.getElementById('log');
+  const fill=document.getElementById('fill');
+  const status=document.getElementById('status');
+  const success=document.getElementById('success');
+
+  btn.disabled=true;
+  prog.style.display='block';
+  logEl.style.display='block';
+
+  try{
+    log('正在下载全国基础地图...');
+    const base=await fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json').then(r=>r.json());
+
+    const singles=base.features.filter(f=>!DRILL.includes(f.properties.adcode));
+    const toFetch=base.features.filter(f=>DRILL.includes(f.properties.adcode));
+
+    log(`需要下载 ${toFetch.length} 个省份的详细数据`);
+
+    let features=[...singles];
+    let done=0;
+
+    for(const f of toFetch){
+      const provCode=f.properties.adcode;
+      const name=f.properties.name;
+
+      try{
+        log(`正在下载 ${name}...`);
+        const geo=await fetch(`https://geo.datav.aliyun.com/areas_v3/bound/${provCode}_full.json`).then(r=>r.json());
+        geo.features.forEach(city=>{city.properties.parentCode=provCode});
+        features.push(...geo.features);
+        done++;
+
+        const percent=(done/toFetch.length*100).toFixed(0);
+        fill.style.width=percent+'%';
+        status.textContent=`进度: ${done}/${toFetch.length} (${percent}%)`;
+
+        await new Promise(r=>setTimeout(r,100));
+      }catch(e){
+        log(`  ⚠️ ${name} 下载失败: ${e.message}`);
+        done++;
+      }
+    }
+
+    log('正在合并数据...');
+    const merged={type:'FeatureCollection',features};
+
+    log('正在保存文件...');
+    const blob=new Blob([JSON.stringify(merged)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='china_cities.json';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    log(`✅ 完成！共 ${features.length} 个区域，文件大小约 ${(blob.size/1024/1024).toFixed(2)} MB`);
+    success.style.display='block';
+    status.textContent='下载完成';
+
+  }catch(e){
+    log(`❌ 错误: ${e.message}`);
+    alert('下载失败: '+e.message);
+    btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>

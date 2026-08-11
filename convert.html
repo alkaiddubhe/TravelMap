@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>转换地图数据</title>
+<style>
+body{font-family:'Microsoft YaHei',sans-serif;max-width:620px;margin:60px auto;padding:20px;background:#f5f5f5}
+.card{background:#fff;padding:32px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+h1{margin:0 0 12px;font-size:20px}
+p{color:#666;line-height:1.8;font-size:14px}
+ol{color:#666;line-height:2;font-size:14px;padding-left:22px}
+input[type=file]{margin:18px 0;font-size:14px}
+.msg{margin-top:16px;font-size:14px;padding:12px;border-radius:6px;display:none}
+.msg.ok{display:block;background:#e8f5e9;color:#2e7d32}
+.msg.err{display:block;background:#ffebee;color:#c62828}
+code{background:#f0f0f0;padding:2px 6px;border-radius:3px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔧 把 china_cities.json 转成 china_cities.js</h1>
+  <p>浏览器不允许双击打开的网页读取本地 json 文件（CORS 限制）。转成 js 后就能直接双击 index.html 使用，不需要任何服务器。</p>
+  <ol>
+    <li>下面选择你下载好的 <code>china_cities.json</code></li>
+    <li>会自动下载一个 <code>china_cities.js</code></li>
+    <li>把它放到 index.html 同一个文件夹</li>
+    <li>双击 index.html，完成</li>
+  </ol>
+  <input type="file" id="file" accept=".json">
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+document.getElementById('file').onchange=e=>{
+  const f=e.target.files[0];
+  const msg=document.getElementById('msg');
+  if(!f)return;
+  msg.className='msg';msg.textContent='';
+  const r=new FileReader();
+  r.onload=ev=>{
+    const text=ev.target.result;
+    try{
+      const geo=JSON.parse(text);
+      if(!geo.features||!geo.features.length)throw new Error('文件里没有 features');
+      const blob=new Blob(['window.CHINA_CITIES='+text+';'],{type:'application/javascript'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='china_cities.js';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      msg.className='msg ok';
+      msg.textContent=`✅ 已生成 china_cities.js（${geo.features.length} 个区域，${(blob.size/1048576).toFixed(1)} MB）。把它放到 index.html 旁边即可。`;
+    }catch(err){
+      msg.className='msg err';
+      msg.textContent='❌ 解析失败：'+err.message;
+    }
+  };
+  r.readAsText(f);
+};
+</script>
+</body>
+</html>

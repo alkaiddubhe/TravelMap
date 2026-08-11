@@ -1,521 +1,548 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>中国旅游地图 · 地级市</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-<!-- 可选：若存在 china_cities.js 则直接用它，双击打开也能跑；不存在会静默失败，转而 fetch json -->
-<script src="china_cities.js" onerror="void 0"></script>
-<!-- Firebase（compat 版，能在 file:// 下工作，不需要打包工具） -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<!-- 你的 Firebase 配置，见 firebase-config.js -->
-<script src="firebase-config.js" onerror="void 0"></script>
+<meta charset="utf-8">
+<title>中国旅游地图</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Microsoft YaHei',system-ui,Arial,sans-serif;background:#f0f2f5;color:#333;padding:16px}
-.container{max-width:1500px;margin:0 auto;background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:18px 22px}
-h1{font-size:20px;font-weight:600;text-align:center;margin-bottom:14px}
-.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin-bottom:10px}
-.bar-label{font-size:13px;color:#999}
-.palette{display:flex;gap:8px;flex-wrap:wrap}
-.chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid #e4e4e4;border-radius:20px;background:#fff;cursor:pointer;font-size:13px;transition:.15s;user-select:none}
-.chip:hover{border-color:#bbb}
-.chip.active{border-color:#5c6bc0;background:#f4f5fc}
-.dot{width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.15)}
-.count{color:#aaa;font-size:12px;min-width:8px}
-.seg{display:flex;border:1px solid #ddd;border-radius:6px;overflow:hidden}
-.seg button{border:none;background:#fff;padding:7px 14px;font-size:13px;cursor:pointer;color:#555}
-.seg button.on{background:#5c6bc0;color:#fff}
-.tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
-.tools button{padding:7px 14px;font-size:13px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;color:#555}
-.tools button:hover{background:#f7f7f7;border-color:#bbb}
-.wrap{position:relative}
-#map{width:100%;height:74vh;min-height:520px}
-.loading{position:absolute;inset:0;background:rgba(255,255,255,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:5}
-.loading.hide{display:none}
-.pbar{width:300px;height:6px;background:#eee;border-radius:3px;overflow:hidden}
-.pbar i{display:block;height:100%;width:0;background:#5c6bc0;transition:.2s}
-.ltext{font-size:13px;color:#777}
-.tip{text-align:center;color:#aaa;font-size:12px;margin-top:10px;line-height:1.8}
-.sync{display:flex;align-items:center;justify-content:center;gap:14px;font-size:12px;color:#888;margin-bottom:10px;flex-wrap:wrap}
-.sync .led{width:8px;height:8px;border-radius:50%;background:#ccc;flex:none}
-.sync.on .led{background:#4CAF50;box-shadow:0 0 0 3px rgba(76,175,80,.15)}
-.sync.off .led{background:#e0a030}
-.sync .me{color:#5c6bc0;cursor:pointer;border-bottom:1px dashed #b9bfe0}
-.sync .who{color:#aaa}
-.toast{position:fixed;left:50%;top:24px;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:99}
-.toast.show{opacity:1}
+body{margin:0;font-family:sans-serif;background:#f5f5f5}
+#app{display:flex;flex-direction:column;height:100vh}
+#toolbar{background:#fff;padding:12px 20px;box-shadow:0 2px 4px rgba(0,0,0,0.1);display:flex;flex-direction:column;gap:10px}
+#toolbar button{padding:8px 16px;border:2px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;font-size:14px;transition:all 0.2s}
+#toolbar button:hover{background:#f0f0f0}
+#toolbar button.active{background:#1890ff;color:#fff;border-color:#1890ff}
+#map{flex:1;background:#e8f4f8}
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 24px;border-radius:4px;display:none;z-index:9999}
+.status-btn{position:relative}
+.status-btn::before{content:'';display:inline-block;width:14px;height:14px;border-radius:2px;margin-right:6px;vertical-align:-2px}
+.status-btn[data-s="0"]::before{background:#ccc}
+.status-btn[data-s="1"]::before{background:#52c41a}
+.status-btn[data-s="2"]::before{background:#1890ff}
+.status-btn[data-s="3"]::before{background:#faad14}
+.status-btn[data-s="4"]::before{background:#f5222d}
+#search-box{padding:6px 12px;border:1px solid #ddd;border-radius:4px;width:200px;font-size:14px}
+#breadcrumb{display:flex;align-items:center;gap:8px;color:#666;font-size:14px}
+#breadcrumb span{cursor:pointer;transition:color 0.2s}
+#breadcrumb span:hover{color:#1890ff}
+.sep{color:#ccc;cursor:default!important}
+#stats{display:flex;gap:20px;color:#666;font-size:13px;margin-left:auto}
+#user-info{color:#666;font-size:13px}
+#modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center}
+#modal.show{display:flex}
+#modal-content{background:#fff;padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:400px}
+#modal-content h3{margin-top:0}
+#modal-content input{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box;margin:10px 0}
+#modal-content button{padding:10px 20px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;width:100%}
+#modal-content button:hover{background:#40a9ff}
+#search-suggestions{font-size:14px}
+#search-suggestions div{padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0}
+#search-suggestions div:hover{background:#f5f5f5}
+#search-suggestions div:last-child{border-bottom:none}
+#search-suggestions .match-city{color:#999;font-size:12px;margin-left:8px}
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>🗺️ 中国旅游地图 · 地级市</h1>
-  <div class="bar">
-    <span class="bar-label">状态</span>
-    <div class="palette" id="palette"></div>
-  </div>
-  <div class="bar">
-    <span class="bar-label">范围</span>
-    <div class="seg">
-      <button class="on" data-scope="city">单个城市</button>
-      <button data-scope="province">整个省</button>
-    </div>
-  </div>
-  <div class="sync" id="sync">
-    <span class="led"></span>
-    <span id="syncText">单机模式</span>
-    <span class="who" id="who"></span>
-    <span>我是 <span class="me" id="me">…</span></span>
-  </div>
-  <div class="tools">
-    <button onclick="share()">📤 分享链接</button>
-    <button onclick="exportData()">💾 导出</button>
-    <button onclick="importData()">📥 导入</button>
-    <button onclick="resetView()">🔄 复位视图</button>
-    <button onclick="clearAll()">🗑️ 清空</button>
-  </div>
-  <div class="wrap">
-    <div id="map"></div>
-    <div class="loading" id="loading">
-      <div class="ltext">加载地图数据…</div>
-      <div class="pbar"><i id="progress"></i></div>
-    </div>
-  </div>
-  <p class="tip">
-    💡 先点上方状态按钮选画笔，再点地图区域上色 · 用相同状态再点一次可取消<br>
-    「整个省」模式下鼠标悬停会整省高亮，点一下染整个省<br>
-    同房间的人共用这一张图，谁的改动都会实时同步给所有人
-  </p>
+<div id="app">
+<div id="toolbar">
+<div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap">
+<div id="breadcrumb">
+<span onclick="goNational()">全国</span>
+<button id="exit-btn" style="display:none;margin-left:10px;padding:4px 12px;background:#f5222d;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="goNational()">退出省份</button>
 </div>
-<div class="toast" id="toast"></div>
+<div style="position:relative;width:200px">
+<input id="search-box" placeholder="搜索省份或城市..." autocomplete="off" />
+<div id="search-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-top:none;box-shadow:0 2px 4px rgba(0,0,0,0.1);z-index:1000;max-height:200px;overflow-y:auto"></div>
+</div>
+<div id="stats"></div>
+<div id="user-info"></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<button id="mode-btn" onclick="toggleMode()" style="background:#52c41a;color:#fff;border-color:#52c41a">省份模式</button>
+<button id="view-btn" onclick="toggleView()" style="background:#1890ff;color:#fff;border-color:#1890ff">综合视图</button>
+<button class="status-btn" data-s="0" onclick="selectStatus(0)">未去过</button>
+<button class="status-btn" data-s="1" onclick="selectStatus(1)">去过</button>
+<button class="status-btn active" data-s="2" onclick="selectStatus(2)">很想去</button>
+<button class="status-btn" data-s="3" onclick="selectStatus(3)">去过还想去</button>
+<button class="status-btn" data-s="4" onclick="selectStatus(4)">不想去</button>
+</div>
+</div>
+<div id="map"></div>
+</div>
+<div id="toast"></div>
+<div id="modal" class="show">
+<div id="modal-content">
+<h3>输入你的昵称</h3>
+<input id="username-input" placeholder="例如：小明" maxlength="20" />
+<button onclick="setUsername()">开始使用</button>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+<script src="china_cities.js"></script>
+<script src="firebase-config.js"></script>
 <script>
-const STATUS={UNVISITED:0,WANT:1,VISITED:2,WANT_AGAIN:3,NO:4};
-const COLORS=['#f5f5f5','#90CAF9','#81C784','#FFB74D','#BCAAA4'];
-const NAMES=['未去过','很想去','去过','去过但还想去','不想去'];
-const HOVER='#D6DAF0';
-const PROV={110000:'北京市',120000:'天津市',130000:'河北省',140000:'山西省',150000:'内蒙古自治区',
-210000:'辽宁省',220000:'吉林省',230000:'黑龙江省',310000:'上海市',320000:'江苏省',330000:'浙江省',
-340000:'安徽省',350000:'福建省',360000:'江西省',370000:'山东省',410000:'河南省',420000:'湖北省',
-430000:'湖南省',440000:'广东省',450000:'广西壮族自治区',460000:'海南省',500000:'重庆市',
-510000:'四川省',520000:'贵州省',530000:'云南省',540000:'西藏自治区',610000:'陕西省',620000:'甘肃省',
-630000:'青海省',640000:'宁夏回族自治区',650000:'新疆维吾尔自治区',710000:'台湾省',
+let chart,cityStatus={},selected=2,roomRef,pushing=false,firstSnap=true;
+let cityMap={},provinceMap={},nameToCode={},currentUser='',currentLevel='national',currentProvince='';
+let nationalGeo=null,provinceGeos={},nationalProvGeo=null,provNameToCode={};
+let clickMode='province',viewMode='aggregate';
+
+const STATUS_COLORS=['#ccc','#52c41a','#1890ff','#faad14','#f5222d'];
+const STATUS_NAMES=['未去过','去过','很想去','去过还想去','不想去'];
+const PROV_NAMES={110000:'北京市',120000:'天津市',130000:'河北省',140000:'山西省',
+150000:'内蒙古自治区',210000:'辽宁省',220000:'吉林省',230000:'黑龙江省',310000:'上海市',
+320000:'江苏省',330000:'浙江省',340000:'安徽省',350000:'福建省',360000:'江西省',
+370000:'山东省',410000:'河南省',420000:'湖北省',430000:'湖南省',440000:'广东省',
+450000:'广西壮族自治区',460000:'海南省',500000:'重庆市',510000:'四川省',520000:'贵州省',
+530000:'云南省',540000:'西藏自治区',610000:'陕西省',620000:'甘肃省',630000:'青海省',
+640000:'宁夏回族自治区',650000:'新疆维吾尔自治区',710000:'台湾省',
 810000:'香港特别行政区',820000:'澳门特别行政区'};
-let cityStatus={};
-let selected=STATUS.UNVISITED;
-let scope='city';
-let chart,cityMap,provinceMap,nameToCode={};
-
-// ---------- 云端同步 ----------
-let db=null,roomRef=null,cloud=false,myName='';
-const room=new URLSearchParams(location.search).get('room')||window.ROOM_ID||'default';
-
-function initCloud(){
-  const cfg=window.FIREBASE_CONFIG;
-  if(!cfg||!cfg.databaseURL||cfg.apiKey.startsWith('粘贴')){
-    setSync(null,'单机模式（未配置 Firebase）');
-    return false;
-  }
-  try{
-    firebase.initializeApp(cfg);
-    db=firebase.database();
-    roomRef=db.ref('rooms/'+room);
-    cloud=true;
-  }catch(e){
-    console.error(e);
-    setSync(null,'云端初始化失败，已退回单机模式');
-    return false;
-  }
-
-  myName=localStorage.getItem('travelMapName')||'';
-  if(!myName){
-    myName=(prompt('你叫什么？（会显示给同房间的人）')||'').trim()||'匿名';
-    localStorage.setItem('travelMapName',myName);
-  }
-  document.getElementById('me').textContent=myName;
-  document.getElementById('me').onclick=rename;
-
-  // 连接状态
-  db.ref('.info/connected').on('value',s=>{
-    const ok=s.val()===true;
-    setSync(ok,ok?`已连接 · 房间「${room}」`:'离线，修改会在恢复后上传');
-  });
-
-  // 地图数据：任何人改动都会推到所有人
-  let firstSnap=true;
-  roomRef.child('map').on('value',s=>{
-    const remote=s.val()||{};
-    if(pushing)return;                       // 忽略自己刚写入的回声
-
-    // 第一次连上：房间还是空的，就把本地已有的标记作为初始内容上传
-    if(firstSnap){
-      firstSnap=false;
-      if(!Object.keys(remote).length&&Object.keys(cityStatus).length){
-        push({...cityStatus});
-        toast(`已把本地 ${Object.keys(cityStatus).length} 个标记上传到房间`);
-        return;
-      }
-    }
-
-    cityStatus={};
-    Object.entries(remote).forEach(([k,v])=>{if(v!=null)cityStatus[k]=v});
-    localStorage.setItem('travelMapData',JSON.stringify(cityStatus));
-    if(chart){updateStats();refresh()}
-  });
-
-  initPresence();
-  return true;
-}
-
-// 在线名单：断线自动移除
-function initPresence(){
-  const meRef=roomRef.child('online').push();
-  meRef.onDisconnect().remove();
-  db.ref('.info/connected').on('value',s=>{
-    if(s.val()===true)meRef.set(myName);
-  });
-  roomRef.child('online').on('value',s=>{
-    const names=Object.values(s.val()||{}).filter(n=>n);
-    const others=names.length-1;
-    document.getElementById('who').textContent=
-      others>0?`· 在线 ${names.length} 人：${names.join('、')}`:'· 只有你在线';
-  });
-}
-
-function setSync(ok,text){
-  const el=document.getElementById('sync');
-  el.className='sync'+(ok===true?' on':ok===false?' off':'');
-  document.getElementById('syncText').textContent=text;
-}
-
-function rename(){
-  const n=(prompt('改个名字',myName)||'').trim();
-  if(!n)return;
-  myName=n;
-  localStorage.setItem('travelMapName',n);
-  document.getElementById('me').textContent=n;
-  if(cloud)initPresence();
-}
-
-// 只推送变化的字段，避免整对象覆盖把别人同时的改动冲掉
-let pushing=false,pushTimer=null;
-function push(patch){
-  if(!cloud)return;
-  pushing=true;
-  clearTimeout(pushTimer);
-  roomRef.child('map').update(patch).catch(e=>{
-    console.error(e);
-    toast('上传失败：'+e.message);
-  });
-  roomRef.child('lastBy').set({name:myName,at:firebase.database.ServerValue.TIMESTAMP});
-  pushTimer=setTimeout(()=>{pushing=false},400);
-}
-
-async function loadGeo(){
-  const pbar=document.getElementById('progress'),ltext=document.querySelector('.ltext');
-  pbar.style.width='30%';
-
-  // 方式1：china_cities.js 已通过 script 标签载入（双击打开也能用）
-  if(window.CHINA_CITIES){
-    pbar.style.width='100%';
-    return window.CHINA_CITIES;
-  }
-
-  // 方式2：通过 HTTP 读取 json（需要本地服务器）
-  ltext.textContent='读取 china_cities.json…';
-  try{
-    const res=await fetch('china_cities.json');
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const geo=await res.json();
-    pbar.style.width='100%';
-    return geo;
-  }catch(e){
-    throw new Error('读不到地图数据。请用 convert.html 把 china_cities.json 转成 china_cities.js，或通过本地服务器打开');
-  }
-}
-
-function buildIndex(geo){
-  cityMap={};provinceMap={};nameToCode={};
-  const seen={};
-  geo.features.forEach(f=>{
-    const p=f.properties,code=p.adcode,name=p.name,lvl=p.level;
-
-    // 省代码：优先用下载时写入的 parentCode，否则按 adcode 前2位推断（130100 -> 130000）
-    let provCode=p.parentCode||(lvl==='province'?code:Math.floor(code/10000)*10000);
-
-    // 极少数跨省重名，用省名区分
-    let displayName=name;
-    if(seen[name])displayName=`${name}（${PROV[provCode]||provCode}）`;
-    seen[name]=true;
-
-    cityMap[code]={name:displayName,province:provCode};
-    nameToCode[displayName]=String(code);
-    if(!provinceMap[provCode])provinceMap[provCode]=[];
-    provinceMap[provCode].push(String(code));
-  });
-  console.log(`已载入 ${Object.keys(cityMap).length} 个区域，${Object.keys(provinceMap).length} 个省级单位`);
-}
-
-function init(){
-  loadData();
-  const online=initCloud();
-  if(!online)applyHash();          // 云端模式下不用 hash，房间本身就是共享源
-  loadGeo().then(geo=>{
-    buildIndex(geo);
-    echarts.registerMap('china',geo);
-    drawChart();
-    document.getElementById('loading').classList.add('hide');
-  }).catch(e=>{
-    document.querySelector('.ltext').textContent=e.message;
-    document.querySelector('.ltext').style.color='#e53935';
-    console.error(e);
-  });
-}
-
-function buildData(){
-  return Object.keys(cityStatus).map(code=>({
-    name:cityMap[code]?.name||'',
-    itemStyle:{areaColor:COLORS[cityStatus[code]]}
-  }));
-}
-
-// 省模式下不显示单市名（会糊成一片），靠 tooltip 给省名
-function scopeStyle(){
-  return {
-    label:{show:false},
-    emphasis:{
-      label:{show:scope==='city',color:'#000',fontSize:11},
-      itemStyle:{areaColor:HOVER,borderColor:'#5c6bc0',borderWidth:0.8}
-    }
-  };
-}
-
-// 只更新颜色，保留当前缩放/位置
-function refresh(){
-  chart.setOption({
-    animation:false,
-    series:[Object.assign({data:buildData()},scopeStyle())]
-  });
-}
-
-// 省模式：悬停一个市 -> 整省一起亮
-let hoverProv=null,downplayTimer=null;
-function onHover(name){
-  if(scope!=='city'){
-    const code=nameToCode[name];
-    const prov=code&&cityMap[code].province;
-    if(!prov)return;
-    clearTimeout(downplayTimer);
-    if(hoverProv===prov)return;
-    hoverProv=prov;
-    chart.dispatchAction({type:'downplay',seriesIndex:0});
-    chart.dispatchAction({
-      type:'highlight',seriesIndex:0,
-      name:(provinceMap[prov]||[]).map(c=>cityMap[c].name)
-    });
-  }
-}
-function onLeave(){
-  if(scope!=='city'){
-    downplayTimer=setTimeout(()=>{
-      hoverProv=null;
-      chart.dispatchAction({type:'downplay',seriesIndex:0});
-    },60);
-  }
-}
-
-function drawChart(){
-  if(!chart)chart=echarts.init(document.getElementById('map'));
-  const data=buildData();
-  chart.setOption({
-    tooltip:{trigger:'item',formatter:p=>{
-      const code=nameToCode[p.name];
-      if(!code)return p.name;
-      const prov=cityMap[code].province;
-      if(scope==='province'){
-        const cities=provinceMap[prov]||[];
-        const marked=cities.filter(c=>cityStatus[c]!=null).length;
-        return `<b>${PROV[prov]||p.name}</b><br/>整省 ${cities.length} 个地区，已标记 ${marked} 个`;
-      }
-      const st=cityStatus[code]||STATUS.UNVISITED;
-      const pn=PROV[prov];
-      return `${p.name}${pn&&pn!==p.name?`　<span style="color:#999">${pn}</span>`:''}<br/>状态: ${NAMES[st]}`;
-    }},
-    series:[Object.assign({
-      type:'map',map:'china',roam:true,scaleLimit:{min:0.8,max:8},zoom:2.2,center:[112,33],
-      itemStyle:{borderColor:'#888',borderWidth:0.4},
-      selectedMode:false,
-      data
-    },scopeStyle())]
-  },true);
-  chart.off('click');chart.on('click',p=>{
-    if(p.componentType!=='series')return;
-    const code=nameToCode[p.name];
-    if(!code)return;
-    const patch={};
-    if(scope==='province'){
-      const prov=cityMap[code].province||code;
-      const cities=provinceMap[prov]||[prov];
-      const allSame=cities.every(c=>(cityStatus[c]||0)===selected);
-      cities.forEach(c=>{patch[c]=allSame?null:selected});
-    }else{
-      patch[code]=(cityStatus[code]||0)===selected?null:selected;
-    }
-    Object.entries(patch).forEach(([k,v])=>{
-      if(v==null)delete cityStatus[k];
-      else cityStatus[k]=v;
-    });
-    saveData();updateStats();refresh();push(patch);
-    chart.dispatchAction({type:'downplay',seriesIndex:0});
-    hoverProv=null;
-  });
-  chart.off('mouseover');chart.on('mouseover',p=>{
-    if(p.componentType==='series')onHover(p.name);
-  });
-  chart.off('mouseout');chart.on('mouseout',()=>onLeave());
-  window.addEventListener('resize',()=>chart.resize());
-}
-
-function renderPalette(){
-  const p=document.getElementById('palette');
-  p.innerHTML='';
-  [0,1,2,3,4].forEach(s=>{
-    const chip=document.createElement('div');
-    chip.className=s===selected?'chip active':'chip';
-    chip.innerHTML=`<span class="dot" style="background:${COLORS[s]}"></span>${NAMES[s]}<span class="count" data-status="${s}">0</span>`;
-    chip.onclick=()=>{selected=s;renderPalette()};
-    p.appendChild(chip);
-  });
-  updateStats();
-}
-
-function updateStats(){
-  const counts=[0,0,0,0,0];
-  Object.values(cityStatus).forEach(s=>counts[s]++);
-  counts.forEach((c,i)=>{
-    const el=document.querySelector(`.count[data-status="${i}"]`);
-    if(el)el.textContent=c||'';
-  });
-}
-
-function bindScope(){
-  document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
-    scope=b.dataset.scope;
-    document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on');
-    if(chart){
-      hoverProv=null;
-      chart.dispatchAction({type:'downplay',seriesIndex:0});
-      refresh();
-    }
-  });
-}
-
-function saveData(){
-  localStorage.setItem('travelMapData',JSON.stringify(cityStatus));
-}
-function loadData(){
-  const saved=localStorage.getItem('travelMapData');
-  if(saved)try{cityStatus=JSON.parse(saved)}catch(e){}
-}
-
-function encodeHash(){
-  const entries=Object.entries(cityStatus).filter(([,v])=>v>0).map(([k,v])=>k.padStart(6,'0')+v);
-  return entries.join('');
-}
-function decodeHash(h){
-  const re=/(\d{6})(\d)/g,m={};let match;
-  while(match=re.exec(h))m[match[1]]=+match[2];
-  return m;
-}
-function applyHash(){
-  const h=location.hash.slice(1);
-  if(h){
-    const decoded=decodeHash(h);
-    Object.assign(cityStatus,decoded);
-    saveData();
-  }
-}
-
-function share(){
-  // 云端模式：分享房间地址，别人打开就是同一张图
-  // 单机模式：把标记编进 hash，别人打开能看到快照
-  const url=cloud
-    ? location.origin+location.pathname+'?room='+encodeURIComponent(room)
-    : location.origin+location.pathname+'#'+encodeHash();
-  const tip=cloud?'房间链接已复制，打开的人和你共用一张图':'快照链接已复制';
-  navigator.clipboard.writeText(url).then(()=>toast(tip)).catch(()=>{
-    prompt('分享链接（Ctrl+C 复制）',url);
-  });
-}
-
-function exportData(){
-  const obj={};
-  Object.entries(cityStatus).forEach(([k,v])=>{
-    obj[k]={status:v,name:cityMap[k]?.name||''};
-  });
-  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`travel_map_${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function importData(){
-  const input=document.createElement('input');
-  input.type='file';input.accept='application/json';
-  input.onchange=e=>{
-    const file=e.target.files[0];
-    if(!file)return;
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      try{
-        const data=JSON.parse(ev.target.result);
-        const patch={};
-        Object.entries(data).forEach(([k,v])=>{
-          const st=typeof v==='number'?v:v.status;
-          if(st!=null){cityStatus[k]=st;patch[k]=st}
-        });
-        saveData();updateStats();refresh();push(patch);
-        toast(`导入成功，共 ${Object.keys(cityStatus).length} 个标记`+(cloud?'（已同步给所有人）':''));
-      }catch(e){toast('导入失败：文件格式错误')}
-    };
-    reader.readAsText(file);
-  };
-  input.click();
-}
-
-function resetView(){
-  drawChart();
-}
-
-function clearAll(){
-  const warn=cloud
-    ? `这是共享地图，清空会同时清掉同房间所有人的标记（共 ${Object.keys(cityStatus).length} 个）。确定？`
-    : '确定清空所有标记吗？';
-  if(!confirm(warn))return;
-  cityStatus={};
-  location.hash='';
-  saveData();updateStats();refresh();
-  if(cloud){
-    pushing=true;
-    roomRef.child('map').remove();
-    setTimeout(()=>{pushing=false},400);
-  }
-}
 
 function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg;
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2500);
+  t.style.display='block';
+  setTimeout(()=>t.style.display='none',2000);
 }
 
-renderPalette();
-bindScope();
-init();
+function setUsername(){
+  const input=document.getElementById('username-input');
+  const name=input.value.trim();
+  if(!name){toast('请输入昵称');return}
+  currentUser=name;
+  localStorage.setItem('travelMapUser',name);
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('user-info').textContent='当前用户：'+name;
+  init();
+}
+
+async function init(){
+  await loadGeo();
+  buildIndex();
+  drawChart();
+  initCloud();
+  setupSearch();
+}
+
+async function loadGeo(){
+  toast('加载地图数据...');
+  try{
+    if(window.CHINA_CITIES){nationalGeo=window.CHINA_CITIES}
+    else{const r=await fetch('china_cities.json');nationalGeo=await r.json()}
+    toast('地图加载完成');
+  }catch(e){toast('加载失败：'+e.message)}
+}
+
+function buildIndex(){
+  const provSet=new Set();
+  if(!nationalGeo||!nationalGeo.features){
+    toast('地图数据格式错误');
+    return;
+  }
+  nationalGeo.features.forEach(f=>{
+    const code=String(f.properties.adcode);
+    const name=f.properties.name;
+    const parent=f.properties.parentCode?String(f.properties.parentCode):code.substring(0,2)+'0000';
+    cityMap[code]={name,province:parent};
+    nameToCode[name]=code;
+    if(!provinceMap[parent])provinceMap[parent]=[];
+    provinceMap[parent].push(code);
+    if(code.endsWith('0000'))provSet.add(code);
+  });
+}
+
+function getProvinceGeo(provCode){
+  if(provinceGeos[provCode])return provinceGeos[provCode];
+  const cities=provinceMap[provCode]||[];
+  const features=nationalGeo.features.filter(f=>cities.includes(String(f.properties.adcode)));
+  provinceGeos[provCode]={type:'FeatureCollection',features};
+  return provinceGeos[provCode];
+}
+
+function aggregateVotes(votes){
+  if(!votes||typeof votes!=='object')return{color:'#ccc',majority:0,stats:{}};
+  if(viewMode==='personal'){
+    const myVote=votes[currentUser];
+    if(myVote==null)return{color:'#ccc',majority:0,stats:{}};
+    return{color:STATUS_COLORS[myVote],majority:myVote,stats:{[STATUS_NAMES[myVote]]:1},total:1};
+  }
+  const counts=[0,0,0,0,0];
+  Object.values(votes).forEach(v=>{if(v>=0&&v<=4)counts[v]++});
+  let maxCount=0,majority=0;
+  counts.forEach((c,i)=>{if(c>maxCount){maxCount=c;majority=i}});
+  const stats={};
+  counts.forEach((c,i)=>{if(c>0)stats[STATUS_NAMES[i]]=c});
+  return{color:STATUS_COLORS[majority],majority,stats,total:Object.keys(votes).length};
+}
+
+function drawChart(){
+  chart=echarts.init(document.getElementById('map'));
+  if(currentLevel==='national')drawNational();
+  else drawProvince(currentProvince);
+}
+
+function drawNational(){
+  echarts.registerMap('china',nationalGeo);
+
+  const data=[];
+  nationalGeo.features.forEach(f=>{
+    const code=String(f.properties.adcode);
+    const name=f.properties.name;
+    const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
+    const agg=aggregateVotes(cityStatus[provCode]);
+    data.push({
+      name,
+      value:agg.total,
+      itemStyle:{areaColor:agg.color},
+      votes:agg,
+      code,
+      provCode
+    });
+  });
+
+  chart.setOption({
+    tooltip:{trigger:'item',formatter:p=>{
+      if(!p.data)return p.name;
+      const provName=PROV_NAMES[p.data.provCode]||p.name;
+      const v=p.data.votes;
+      if(!v||!v.total)return provName+'<br/>无人标记';
+      let html=`${provName}<br/>${v.total}人标记<br/>`;
+      Object.entries(v.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
+      return html.slice(0,-5);
+    }},
+    series:[{
+      type:'map',map:'china',roam:true,
+      selectedMode:false,
+      itemStyle:{borderColor:'#fff',borderWidth:1.5},
+      emphasis:{itemStyle:{areaColor:'#ffd700'}},
+      data
+    }]
+  },{notMerge:true});
+  chart.off('click');
+  chart.on('click',e=>{
+    if(e.componentType==='series'){
+      const item=data.find(d=>d.name===e.name);
+      if(!item)return;
+      if(clickMode==='city'){
+        drillDown(item.provCode);
+      }else{
+        clickCity(item.provCode);
+      }
+    }
+  });
+  updateStats();
+}
+
+function drawProvince(provCode){
+  const geo=getProvinceGeo(provCode);
+  const mapName='prov_'+provCode;
+  echarts.registerMap(mapName,geo);
+  const cities=provinceMap[provCode]||[];
+  const data=cities.map(code=>{
+    const agg=aggregateVotes(cityStatus[code]);
+    return{name:cityMap[code].name,value:agg.total,itemStyle:{areaColor:agg.color},votes:agg,code};
+  });
+  chart.setOption({
+    tooltip:{trigger:'item',formatter:p=>{
+      if(!p.data)return p.name;
+      const v=p.data.votes;
+      if(!v||!v.total)return p.name+'<br/>无人标记';
+      let html=`${p.name}<br/>${v.total}人标记<br/>`;
+      Object.entries(v.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
+      return html.slice(0,-5);
+    }},
+    series:[{
+      type:'map',map:mapName,roam:true,
+      selectedMode:false,
+      itemStyle:{borderColor:'#fff',borderWidth:1.5},
+      emphasis:{itemStyle:{areaColor:'#ffd700'}},
+      data
+    }]
+  },{notMerge:true});
+  chart.off('click');
+  chart.on('click',e=>{
+    if(e.componentType==='series'){
+      const item=data.find(d=>d.name===e.name);
+      if(!item)return;
+      if(clickMode==='province'){
+        clickCity(provCode);
+      }else{
+        clickCity(item.code);
+      }
+    }
+  });
+  updateStats();
+}
+
+function toggleMode(){
+  clickMode=clickMode==='province'?'city':'province';
+  const btn=document.getElementById('mode-btn');
+  btn.textContent=clickMode==='province'?'省份模式':'城市模式';
+  toast(clickMode==='province'?'切换为省份模式：点击省份直接标记':'切换为城市模式：点击省份进入内部标记');
+}
+
+function toggleView(){
+  viewMode=viewMode==='aggregate'?'personal':'aggregate';
+  const btn=document.getElementById('view-btn');
+  btn.textContent=viewMode==='aggregate'?'综合视图':'个人视图';
+  toast(viewMode==='aggregate'?'切换为综合视图：显示所有人的投票统计':'切换为个人视图：只显示你的标记');
+  refresh();
+}
+
+function drillDown(provCode){
+  currentLevel='province';
+  currentProvince=provCode;
+  const provName=PROV_NAMES[provCode]||cityMap[provCode].name;
+  document.getElementById('breadcrumb').innerHTML=`
+    <span onclick="goNational()">全国</span>
+    <span class="sep"> / </span>
+    <span>${provName}</span>
+    <button id="exit-btn" style="margin-left:10px;padding:4px 12px;background:#f5222d;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="goNational()">退出省份</button>`;
+  drawProvince(provCode);
+  toast('进入'+provName);
+}
+
+function goNational(){
+  if(currentLevel==='national')return;
+  currentLevel='national';
+  currentProvince='';
+  document.getElementById('breadcrumb').innerHTML='<span onclick="goNational()">全国</span>';
+  drawNational();
+  toast('返回全国视图');
+}
+
+function clickCity(code){
+  const patch={};
+  const votes=cityStatus[code]||{};
+  const myVote=votes[currentUser];
+  if(myVote===selected)patch[code]={...votes,[currentUser]:null};
+  else patch[code]={...votes,[currentUser]:selected};
+  Object.keys(patch[code]).forEach(k=>{if(patch[code][k]===null)delete patch[code][k]});
+  applyPatch(patch);
+  push(patch);
+}
+
+function applyPatch(patch){
+  Object.entries(patch).forEach(([code,votes])=>{
+    if(!votes||!Object.keys(votes).length)delete cityStatus[code];
+    else cityStatus[code]=votes;
+  });
+  refresh();
+}
+
+function refresh(){
+  if(!chart)return;
+
+  if(currentLevel==='national'){
+    const data=[];
+    nationalGeo.features.forEach(f=>{
+      const code=String(f.properties.adcode);
+      const name=f.properties.name;
+      const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
+      const agg=aggregateVotes(cityStatus[provCode]);
+      data.push({
+        name,
+        value:agg.total,
+        itemStyle:{areaColor:agg.color},
+        votes:agg,
+        code,
+        provCode
+      });
+    });
+    chart.setOption({
+      series:[{data}]
+    });
+  }else{
+    const cities=provinceMap[currentProvince]||[];
+    const data=cities.map(code=>{
+      const agg=aggregateVotes(cityStatus[code]);
+      return{name:cityMap[code].name,value:agg.total,itemStyle:{areaColor:agg.color},votes:agg,code};
+    });
+    chart.setOption({
+      series:[{data}]
+    });
+  }
+  updateStats();
+}
+
+function selectStatus(s){
+  selected=s;
+  document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`[data-s="${s}"]`).classList.add('active');
+}
+
+function updateStats(){
+  const allVotes=Object.values(cityStatus).flatMap(v=>Object.values(v));
+  const counts=[0,0,0,0,0];
+  allVotes.forEach(v=>{if(v>=0&&v<=4)counts[v]++});
+  let html='';
+  counts.forEach((c,i)=>{if(c>0)html+=`<span>${STATUS_NAMES[i]}：${c}</span>`});
+  document.getElementById('stats').innerHTML=html||'暂无标记';
+}
+
+let pushTimer=null;
+function push(patch){
+  if(!roomRef)return;
+  pushing=true;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>{
+    const updates={};
+    Object.entries(patch).forEach(([code,votes])=>{
+      updates[`map/${code}`]=Object.keys(votes).length?votes:null;
+    });
+    roomRef.update(updates).then(()=>{pushing=false}).catch(e=>{pushing=false;toast('同步失败')});
+  },400);
+}
+
+function initCloud(){
+  if(!window.FIREBASE_CONFIG){toast('未配置Firebase');return}
+  firebase.initializeApp(window.FIREBASE_CONFIG);
+  const db=firebase.database();
+  roomRef=db.ref('rooms/'+(window.ROOM_ID||'default'));
+  roomRef.child('map').on('value',s=>{
+    const remote=s.val()||{};
+    if(pushing)return;
+    if(firstSnap){
+      firstSnap=false;
+      const needMigration=Object.values(remote).some(v=>typeof v==='number');
+      if(needMigration){
+        const migrated={};
+        Object.entries(remote).forEach(([code,v])=>{
+          if(typeof v==='number')migrated[code]={匿名用户:v};
+          else migrated[code]=v;
+        });
+        const updates={};
+        Object.entries(migrated).forEach(([k,v])=>{updates[`map/${k}`]=v});
+        roomRef.update(updates);
+        toast('数据已自动迁移到新版本');
+        cityStatus=migrated;
+        localStorage.setItem('travelMapData',JSON.stringify(cityStatus));
+        if(chart)refresh();
+        return;
+      }
+      if(!Object.keys(remote).length&&Object.keys(cityStatus).length){
+        const updates={};
+        Object.entries(cityStatus).forEach(([k,v])=>{updates[`map/${k}`]=v});
+        roomRef.update(updates);
+        toast(`已上传 ${Object.keys(cityStatus).length} 个标记`);
+        return;
+      }
+    }
+    cityStatus={};
+    Object.entries(remote).forEach(([k,v])=>{if(v)cityStatus[k]=v});
+    localStorage.setItem('travelMapData',JSON.stringify(cityStatus));
+    if(chart)refresh();
+  });
+  roomRef.child('presence').child(currentUser).set(true);
+  roomRef.child('presence').child(currentUser).onDisconnect().remove();
+}
+
+function setupSearch(){
+  const input=document.getElementById('search-box');
+  const suggestions=document.getElementById('search-suggestions');
+
+  input.addEventListener('input',e=>{
+    const query=input.value.trim();
+    if(!query){suggestions.style.display='none';return}
+
+    const results=[];
+    const allNames=Object.keys(nameToCode);
+
+    allNames.forEach(name=>{
+      const code=nameToCode[name];
+      const isProv=code.endsWith('0000');
+      if(name===query){
+        results.push({name,code,score:1000,isProv});
+      }else if(name.includes(query)){
+        results.push({name,code,score:500+query.length/name.length*100,isProv});
+      }else{
+        let overlap=0;
+        for(let c of query){if(name.includes(c))overlap++}
+        if(overlap>0){
+          results.push({name,code,score:overlap*10,isProv});
+        }
+      }
+    });
+
+    results.sort((a,b)=>b.score-a.score);
+    const top3=results.slice(0,3);
+
+    if(top3.length){
+      suggestions.innerHTML=top3.map(r=>{
+        const provInfo=r.isProv?'':`<span class="match-city">${PROV_NAMES[cityMap[r.code].province]}</span>`;
+        return`<div onclick="selectSearch('${r.code}')">${r.name}${provInfo}</div>`;
+      }).join('');
+      suggestions.style.display='block';
+    }else{
+      suggestions.style.display='none';
+    }
+  });
+
+  input.addEventListener('keypress',e=>{
+    if(e.key==='Enter'){
+      const first=suggestions.querySelector('div');
+      if(first)first.click();
+    }
+  });
+
+  document.addEventListener('click',e=>{
+    if(!input.contains(e.target)&&!suggestions.contains(e.target)){
+      suggestions.style.display='none';
+    }
+  });
+}
+
+function selectSearch(code){
+  document.getElementById('search-suggestions').style.display='none';
+  document.getElementById('search-box').value='';
+
+  if(clickMode!=='city'){
+    clickMode='city';
+    document.getElementById('mode-btn').textContent='城市模式';
+    toast('自动切换到城市模式');
+  }
+
+  if(code.endsWith('0000')){
+    if(currentLevel!=='national')goNational();
+    setTimeout(()=>drillDown(code),currentLevel!=='national'?100:0);
+  }else{
+    const prov=cityMap[code].province;
+    if(currentLevel==='national'){
+      drillDown(prov);
+      setTimeout(()=>highlightCity(code),100);
+    }else if(currentProvince!==prov){
+      goNational();
+      setTimeout(()=>{
+        drillDown(prov);
+        setTimeout(()=>highlightCity(code),100);
+      },100);
+    }else{
+      highlightCity(code);
+    }
+  }
+}
+
+function highlightCity(code){
+  const name=cityMap[code].name;
+  chart.dispatchAction({type:'highlight',seriesIndex:0,name});
+  toast('已定位：'+name);
+  setTimeout(()=>chart.dispatchAction({type:'downplay',seriesIndex:0,name}),2000);
+}
+
+const saved=localStorage.getItem('travelMapUser');
+if(saved){
+  currentUser=saved;
+  document.getElementById('username-input').value=saved;
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('user-info').textContent='当前用户：'+saved;
+  init();
+}
 </script>
 </body>
 </html>
+
+
+
+
+
+
