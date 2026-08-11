@@ -149,6 +149,10 @@ function buildIndex(){
     provinceMap[parent].push(code);
     if(code.endsWith('0000'))provSet.add(code);
   });
+
+  Object.entries(PROV_NAMES).forEach(([code,name])=>{
+    nameToCode[name]=code;
+  });
 }
 
 function getProvinceGeo(provCode){
