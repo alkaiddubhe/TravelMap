@@ -56,13 +56,12 @@ body{margin:0;font-family:sans-serif;background:#f5f5f5}
 <div id="user-info"></div>
 </div>
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-<button id="mode-btn" onclick="toggleMode()" style="background:#52c41a;color:#fff;border-color:#52c41a">省份模式</button>
 <button id="view-btn" onclick="toggleView()" style="background:#1890ff;color:#fff;border-color:#1890ff">综合视图</button>
-<button class="status-btn" data-s="0" onclick="selectStatus(0)">未去过</button>
-<button class="status-btn" data-s="1" onclick="selectStatus(1)">去过</button>
-<button class="status-btn active" data-s="2" onclick="selectStatus(2)">很想去</button>
-<button class="status-btn" data-s="3" onclick="selectStatus(3)">去过还想去</button>
-<button class="status-btn" data-s="4" onclick="selectStatus(4)">不想去</button>
+<button class="status-btn active" data-s="0" onclick="selectStatus(0)">未标记</button>
+<button class="status-btn" data-s="1" onclick="selectStatus(1)">很想去</button>
+<button class="status-btn" data-s="2" onclick="selectStatus(2)">一般想去</button>
+<button class="status-btn" data-s="3" onclick="selectStatus(3)">不太想去</button>
+<button class="status-btn" data-s="4" onclick="selectStatus(4)">很不想去</button>
 </div>
 </div>
 <div id="map"></div>
@@ -82,13 +81,13 @@ body{margin:0;font-family:sans-serif;background:#f5f5f5}
 <script src="china_cities.js"></script>
 <script src="firebase-config.js"></script>
 <script>
-let chart,cityStatus={},selected=2,roomRef,pushing=false,firstSnap=true;
+let chart,cityStatus={},selected=0,roomRef,pushing=false,firstSnap=true;
 let cityMap={},provinceMap={},nameToCode={},currentUser='',currentLevel='national',currentProvince='';
 let nationalGeo=null,provinceGeos={},nationalProvGeo=null,provNameToCode={};
-let clickMode='province',viewMode='aggregate';
+let viewMode='aggregate';
 
 const STATUS_COLORS=['#ccc','#52c41a','#1890ff','#faad14','#f5222d'];
-const STATUS_NAMES=['未去过','去过','很想去','去过还想去','不想去'];
+const STATUS_NAMES=['未标记','很想去','一般想去','不太想去','很不想去'];
 const PROV_NAMES={110000:'北京市',120000:'天津市',130000:'河北省',140000:'山西省',
 150000:'内蒙古自治区',210000:'辽宁省',220000:'吉林省',230000:'黑龙江省',310000:'上海市',
 320000:'江苏省',330000:'浙江省',340000:'安徽省',350000:'福建省',360000:'江西省',
@@ -209,16 +208,42 @@ function aggregateVotes(votes){
   if(!votes||typeof votes!=='object')return{color:'#ccc',majority:0,stats:{}};
   if(viewMode==='personal'){
     const myVote=votes[currentUser];
-    if(myVote==null)return{color:'#ccc',majority:0,stats:{}};
+    if(myVote==null||myVote===0)return{color:'#ccc',majority:0,stats:{}};
     return{color:STATUS_COLORS[myVote],majority:myVote,stats:{[STATUS_NAMES[myVote]]:1},total:1};
   }
+
+  const scoreMap={0:0,1:4,2:2,3:-2,4:-4};
   const counts=[0,0,0,0,0];
-  Object.values(votes).forEach(v=>{if(v>=0&&v<=4)counts[v]++});
-  let maxCount=0,majority=0;
-  counts.forEach((c,i)=>{if(c>maxCount){maxCount=c;majority=i}});
+  let totalScore=0;
+  let validVotes=0;
+
+  Object.values(votes).forEach(v=>{
+    if(v>=0&&v<=4){
+      counts[v]++;
+      if(v!==0){
+        totalScore+=scoreMap[v];
+        validVotes++;
+      }
+    }
+  });
+
+  if(validVotes===0)return{color:'#ccc',majority:0,stats:{}};
+
+  const avgScore=totalScore/validVotes;
+  let resultStatus;
+  if(avgScore>=2){
+    resultStatus=1;
+  }else if(avgScore>=0){
+    resultStatus=2;
+  }else if(avgScore>=-2){
+    resultStatus=3;
+  }else{
+    resultStatus=4;
+  }
+
   const stats={};
   counts.forEach((c,i)=>{if(c>0)stats[STATUS_NAMES[i]]=c});
-  return{color:STATUS_COLORS[majority],majority,stats,total:Object.keys(votes).length};
+  return{color:STATUS_COLORS[resultStatus],majority:resultStatus,stats,total:Object.keys(votes).length,avgScore:avgScore.toFixed(1)};
 }
 
 function drawChart(){
@@ -231,11 +256,19 @@ function drawNational(){
   echarts.registerMap('china',nationalGeo);
 
   const data=[];
+  const provData={};
+
   nationalGeo.features.forEach(f=>{
     const code=String(f.properties.adcode);
     const name=f.properties.name;
 
     if(code.endsWith('0000'))return;
+
+    const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
+    if(!provData[provCode]){
+      provData[provCode]={cities:[],votes:aggregateProvinceCities(provCode)};
+    }
+    provData[provCode].cities.push(code);
 
     const agg=aggregateVotes(cityStatus[code]);
     data.push({
@@ -243,38 +276,86 @@ function drawNational(){
       value:agg.total,
       itemStyle:{areaColor:agg.color},
       votes:agg,
-      code
+      code,
+      provCode
     });
   });
 
   chart.setOption({
-    tooltip:{trigger:'item',formatter:p=>{
-      if(!p.data)return p.name;
-      const v=p.data.votes;
-      if(!v||!v.total)return p.name+'<br/>无人标记';
-      let html=`${p.name}<br/>${v.total}人标记<br/>`;
-      Object.entries(v.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
-      return html.slice(0,-5);
-    }},
+    tooltip:{
+      trigger:'item',
+      formatter:p=>{
+        if(!p.data)return p.name;
+        const provCode=p.data.provCode;
+        const provName=PROV_NAMES[provCode]||p.name;
+        const provVotes=provData[provCode].votes;
+        const provAgg=aggregateVotes(provVotes);
+        if(!provAgg||!provAgg.total)return provName+'<br/>无人标记';
+        let html=`${provName}<br/>${provAgg.total}人标记`;
+        if(viewMode==='aggregate'&&provAgg.avgScore!=null){
+          html+=` (平均分：${provAgg.avgScore})`;
+        }
+        html+='<br/>';
+        Object.entries(provAgg.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
+        return html.slice(0,-5);
+      }
+    },
     series:[{
       type:'map',map:'china',roam:true,
       selectedMode:false,
       itemStyle:{borderColor:'#fff',borderWidth:1.5},
-      emphasis:{itemStyle:{areaColor:'#ffd700'}},
+      emphasis:{
+        itemStyle:{areaColor:'#ffd700'},
+        focus:'series'
+      },
       data
     }]
   },{notMerge:true});
+
   chart.off('click');
+  chart.off('mouseover');
+  chart.off('mouseout');
+
+  chart.dispatchAction({type:'downplay',seriesIndex:0});
+
+  let currentHighlight=null;
+  chart.on('mouseover',e=>{
+    if(e.componentType==='series'&&e.data){
+      const provCode=e.data.provCode;
+      if(currentHighlight===provCode)return;
+      if(currentHighlight){
+        const oldCities=provData[currentHighlight].cities;
+        oldCities.forEach(cityCode=>{
+          const cityName=cityMap[cityCode].name;
+          chart.dispatchAction({type:'downplay',seriesIndex:0,name:cityName});
+        });
+      }
+      currentHighlight=provCode;
+      const cities=provData[provCode].cities;
+      cities.forEach(cityCode=>{
+        const cityName=cityMap[cityCode].name;
+        chart.dispatchAction({type:'highlight',seriesIndex:0,name:cityName});
+      });
+    }
+  });
+  chart.on('mouseout',e=>{
+    if(e.componentType==='series'){
+      if(currentHighlight){
+        const cities=provData[currentHighlight].cities;
+        cities.forEach(cityCode=>{
+          const cityName=cityMap[cityCode].name;
+          chart.dispatchAction({type:'downplay',seriesIndex:0,name:cityName});
+        });
+        currentHighlight=null;
+      }
+    }
+  });
+
   chart.on('click',e=>{
     if(e.componentType==='series'){
       const item=data.find(d=>d.name===e.name);
       if(!item)return;
-      const provCode=cityMap[item.code]?cityMap[item.code].province:item.code.substring(0,2)+'0000';
-      if(clickMode==='city'){
-        drillDown(provCode);
-      }else{
-        clickCity(item.code);
-      }
+      drillDown(item.provCode);
     }
   });
   updateStats();
@@ -294,7 +375,11 @@ function drawProvince(provCode){
       if(!p.data)return p.name;
       const v=p.data.votes;
       if(!v||!v.total)return p.name+'<br/>无人标记';
-      let html=`${p.name}<br/>${v.total}人标记<br/>`;
+      let html=`${p.name}<br/>${v.total}人标记`;
+      if(viewMode==='aggregate'&&v.avgScore!=null){
+        html+=` (平均分：${v.avgScore})`;
+      }
+      html+='<br/>';
       Object.entries(v.stats).forEach(([n,c])=>html+=`${n}：${c}人<br/>`);
       return html.slice(0,-5);
     }},
@@ -311,21 +396,10 @@ function drawProvince(provCode){
     if(e.componentType==='series'){
       const item=data.find(d=>d.name===e.name);
       if(!item)return;
-      if(clickMode==='province'){
-        clickCity(provCode);
-      }else{
-        clickCity(item.code);
-      }
+      clickCity(item.code);
     }
   });
   updateStats();
-}
-
-function toggleMode(){
-  clickMode=clickMode==='province'?'city':'province';
-  const btn=document.getElementById('mode-btn');
-  btn.textContent=clickMode==='province'?'省份模式':'城市模式';
-  toast(clickMode==='province'?'切换为省份模式：点击省份直接标记':'切换为城市模式：点击省份进入内部标记');
 }
 
 function toggleView(){
@@ -344,9 +418,34 @@ function drillDown(provCode){
     <span onclick="goNational()">全国</span>
     <span class="sep"> / </span>
     <span>${provName}</span>
-    <button id="exit-btn" style="margin-left:10px;padding:4px 12px;background:#f5222d;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="goNational()">退出省份</button>`;
+    <button id="exit-btn" style="margin-left:10px;padding:4px 12px;background:#f5222d;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="goNational()">退出省份</button>
+    <button id="clear-btn" style="margin-left:6px;padding:4px 12px;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="clearProvince()">清除本省标记</button>`;
   drawProvince(provCode);
   toast('进入'+provName);
+}
+
+function clearProvince(){
+  const provName=PROV_NAMES[currentProvince]||cityMap[currentProvince].name;
+  if(!confirm(`确定要清除你在${provName}的所有标记吗？`))return;
+
+  const cities=provinceMap[currentProvince]||[];
+  const patch={};
+  cities.forEach(code=>{
+    const votes=cityStatus[code];
+    if(votes&&votes[currentUser]!=null){
+      patch[code]={...votes};
+      delete patch[code][currentUser];
+    }
+  });
+
+  if(!Object.keys(patch).length){
+    toast('你在本省没有标记');
+    return;
+  }
+
+  applyPatch(patch);
+  push(patch);
+  toast(`已清除你在${provName}的标记`);
 }
 
 function goNational(){
@@ -354,31 +453,30 @@ function goNational(){
   currentLevel='national';
   currentProvince='';
   document.getElementById('breadcrumb').innerHTML='<span onclick="goNational()">全国</span>';
+  if(chart){
+    chart.dispatchAction({type:'downplay',seriesIndex:0});
+  }
   drawNational();
   toast('返回全国视图');
 }
 
 function clickCity(code){
   const patch={};
+  const votes=cityStatus[code]||{};
+  const myVote=votes[currentUser];
 
-  if(code.endsWith('0000')){
-    const cities=provinceMap[code]||[];
-    cities.forEach(cityCode=>{
-      const votes=cityStatus[cityCode]||{};
-      const myVote=votes[currentUser];
-      if(myVote===selected){
-        patch[cityCode]={...votes,[currentUser]:null};
-      }else{
-        patch[cityCode]={...votes,[currentUser]:selected};
-      }
-      Object.keys(patch[cityCode]).forEach(k=>{if(patch[cityCode][k]===null)delete patch[cityCode][k]});
-    });
+  if(myVote===selected){
+    patch[code]={...votes,[currentUser]:0};
   }else{
-    const votes=cityStatus[code]||{};
-    const myVote=votes[currentUser];
-    if(myVote===selected)patch[code]={...votes,[currentUser]:null};
-    else patch[code]={...votes,[currentUser]:selected};
-    Object.keys(patch[code]).forEach(k=>{if(patch[code][k]===null)delete patch[code][k]});
+    patch[code]={...votes,[currentUser]:selected};
+  }
+
+  if(patch[code][currentUser]===0||patch[code][currentUser]===null){
+    delete patch[code][currentUser];
+  }
+
+  if(!Object.keys(patch[code]).length){
+    delete patch[code];
   }
 
   applyPatch(patch);
@@ -404,13 +502,15 @@ function refresh(){
 
       if(code.endsWith('0000'))return;
 
+      const provCode=cityMap[code]?cityMap[code].province:code.substring(0,2)+'0000';
       const agg=aggregateVotes(cityStatus[code]);
       data.push({
         name,
         value:agg.total,
         itemStyle:{areaColor:agg.color},
         votes:agg,
-        code
+        code,
+        provCode
       });
     });
     chart.setOption({
@@ -559,12 +659,6 @@ function setupSearch(){
 function selectSearch(code){
   document.getElementById('search-suggestions').style.display='none';
   document.getElementById('search-box').value='';
-
-  if(clickMode!=='city'){
-    clickMode='city';
-    document.getElementById('mode-btn').textContent='城市模式';
-    toast('自动切换到城市模式');
-  }
 
   if(code.endsWith('0000')){
     if(currentLevel!=='national')goNational();
