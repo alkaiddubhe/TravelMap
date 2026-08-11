@@ -231,9 +231,9 @@ function aggregateVotes(votes){
 
   const avgScore=totalScore/validVotes;
   let resultStatus;
-  if(avgScore>=2){
+  if(avgScore>2){
     resultStatus=1;
-  }else if(avgScore>=0){
+  }else if(avgScore>0){
     resultStatus=2;
   }else if(avgScore>=-2){
     resultStatus=3;
